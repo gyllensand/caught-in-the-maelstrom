@@ -1,11 +1,14 @@
 import { OrbitControls, Stats, useTexture } from "@react-three/drei";
 import { extend, useFrame, useThree } from "@react-three/fiber";
+import { a, SpringValue, useSpring } from "@react-spring/three";
 import {
   RefObject,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { MeshLine, MeshLineMaterial } from "meshline";
 import {
@@ -15,21 +18,25 @@ import {
   InstancedMesh,
   Texture,
   AdditiveBlending,
+  NormalBlending,
 } from "three";
 import {
-  generateUUID,
   pickRandomColorWithTheme,
   pickRandomDecimalFromInterval,
   pickRandomHash,
   pickRandomIntFromInterval,
   pickRandomNumber,
 } from "./utils";
-import { COLORS, DARK_BG_COLORS, LIGHT_BG_COLORS } from "./constants";
+import {
+  DARK_BG_COLORS,
+  DARK_COLORS,
+  LIGHT_BG_COLORS,
+  LIGHT_COLORS,
+} from "./constants";
 
 extend({ MeshLine, MeshLineMaterial });
 
 interface LineData {
-  id: string;
   curve: Vector2[];
   visibleLength: number;
   width: number;
@@ -59,6 +66,7 @@ const WIDTHS = pickRandomHash([
   [0.01, 0.06],
   [0.02, 0.07],
 ]);
+
 const WIDTH_GROWTH = pickRandomDecimalFromInterval(1.5, 6.5);
 const RADIUS_START = pickRandomDecimalFromInterval(0.3, 0.8);
 const Z_INCREMENT = pickRandomDecimalFromInterval(0.05, 0.1);
@@ -69,35 +77,34 @@ const WIREFRAME = pickRandomHash([
   ...new Array(9).fill(null).map(() => false),
   true,
 ]);
-
 const USE_TEXTURE = pickRandomHash([true, false]);
-
 const REVERSE_ANGLE = pickRandomHash([true, false]);
+const IS_IRREGULAR_ANGLE = pickRandomHash([false, false, true]);
+const IRREGULAR_ANGLE = pickRandomDecimalFromInterval(1, 3);
 
-const IS_IRREGULAR_ANGLE = pickRandomHash([
-  ...new Array(3).fill(null).map(() => false),
+const BG_THEME = pickRandomHash([0, 1, 1, 1]);
+const DARK_BG = BG_THEME === 1;
+const BG_COLOR = pickRandomHash(DARK_BG ? DARK_BG_COLORS : LIGHT_BG_COLORS);
+const LINE_THEME = DARK_BG ? LIGHT_COLORS : DARK_COLORS;
+const PRIMARY_COLOR = pickRandomHash(LINE_THEME);
+const SECONDARY_COLOR = pickRandomHash(LINE_THEME);
+const TERTIARY_COLOR = pickRandomHash(LINE_THEME);
+const MIXED_LINE_COLORS = pickRandomHash([20, 20, 30, 30, 90]);
+const SINGLE_LINE_COLORS = pickRandomHash([
+  ...new Array(9).fill(null).map(() => false),
   true,
 ]);
 
-const IRREGULAR_ANGLE = pickRandomDecimalFromInterval(1, 3);
-
-const BG_THEME = pickRandomHash([0, 1]);
-const BG_COLOR = pickRandomHash(
-  BG_THEME === 0 ? LIGHT_BG_COLORS : DARK_BG_COLORS
-);
-
-const PRIMARY_COLOR = pickRandomHash(COLORS);
-const SECONDARY_COLOR = pickRandomHash(COLORS);
-const TERTIARY_COLOR = pickRandomHash(COLORS);
-
+console.log("MIXED_LINE_COLORS", MIXED_LINE_COLORS);
+console.log("SINGLE_LINE_COLORS", SINGLE_LINE_COLORS);
 console.log("BG_COLOR", BG_COLOR);
 console.log("WIDTH_GROWTH", WIDTH_GROWTH);
 console.log("RADIUS_START", RADIUS_START);
 console.log("Z_INCREMENT", Z_INCREMENT);
 console.log("ANGLE_INCREMENT", ANGLE_INCREMENT);
 console.log("RADIUS_INCREMENT", RADIUS_INCREMENT);
+
 function Fatline({
-  id,
   index,
   curve,
   visibleLength,
@@ -105,7 +112,12 @@ function Fatline({
   color,
   speed,
   texture,
-}: LineData & { index: number; texture: { map: Texture } }) {
+  incrementor,
+}: LineData & {
+  index: number;
+  texture: { map: Texture };
+  incrementor: SpringValue<number>;
+}) {
   const ref = useRef<InstancedMesh<MeshLine>>(null);
   const updatedCurve = useRef<number[]>([]);
   let z = useRef(Z_MIN);
@@ -158,7 +170,7 @@ function Fatline({
     // @ts-ignore
     ref.current.material.uniforms.dashOffset.value = 0;
     // @ts-ignore
-    ref.current.material.uniforms.opacity.value = 1;
+    // ref.current.material.uniforms.opacity.value = 1;
   }, []);
 
   useLayoutEffect(() => {
@@ -166,7 +178,7 @@ function Fatline({
 
     ref.current!.geometry.setFromPoints(curve);
     ref.current!.geometry.setPoints(updatedCurve.current, (p: number) =>
-      widthGrow > 4 ? Math.sin(p * widthGrow) : p * widthGrow
+      WIDTH_GROWTH > 4 ? Math.sin(p * widthGrow) : p * widthGrow
     );
 
     setTimeout(() => {
@@ -196,7 +208,8 @@ function Fatline({
 
     if (hasStarted.current) {
       // @ts-ignore
-      ref.current.material.uniforms.dashOffset.value -= speed;
+      ref.current.material.uniforms.dashOffset.value -=
+        speed + incrementor.get();
     }
   });
 
@@ -217,7 +230,7 @@ function Fatline({
         dashOffset={dashOffset}
         dashRatio={dashRatio}
         wireframe={WIREFRAME}
-        blending={AdditiveBlending}
+        blending={DARK_BG ? AdditiveBlending : NormalBlending}
         useMap={USE_TEXTURE}
         {...texture}
       />
@@ -254,18 +267,17 @@ const generateLine = (count: number, index: number): LineData => {
 
   // @ts-ignore
   const curve = new SplineCurve(linePoints).getPoints(50);
+  const colorSplit =
+    index < count / 3
+      ? PRIMARY_COLOR
+      : index < count / 1.5
+      ? SECONDARY_COLOR
+      : TERTIARY_COLOR;
 
   return {
-    id: generateUUID(),
-    color: pickRandomColorWithTheme(
-      index < count / 3
-        ? PRIMARY_COLOR
-        : index < count / 1.5
-        ? SECONDARY_COLOR
-        : TERTIARY_COLOR,
-      COLORS,
-      20
-    ),
+    color: SINGLE_LINE_COLORS
+      ? PRIMARY_COLOR
+      : pickRandomColorWithTheme(colorSplit, LINE_THEME, MIXED_LINE_COLORS),
     visibleLength: pickRandomDecimalFromInterval(LENGTHS[0], LENGTHS[1]),
     width: pickRandomDecimalFromInterval(WIDTHS[0], WIDTHS[1]),
     speed: pickRandomDecimalFromInterval(SPEEDS[0], SPEEDS[1], 3),
@@ -278,22 +290,63 @@ const lineShapes = new Array(LINE_COUNT)
   .map((_, i) => generateLine(LINE_COUNT, i));
 
 const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
-  const { aspect, renderer } = useThree((state) => ({
+  const { aspect } = useThree((state) => ({
     aspect: state.viewport.aspect,
-    renderer: state.gl.info.render,
   }));
 
   const texture = useTexture({
     map: `${process.env.PUBLIC_URL}/stroke.png`,
   });
 
+  const [spring, setSpring] = useSpring(() => ({
+    speed: 0,
+  }));
+
+  const onPointerDown = useCallback(() => {
+    setSpring.start({ speed: 0.01 });
+  }, [setSpring]);
+
+  const onPointerUp = useCallback(() => {
+    setSpring.start({
+      from: { speed: 0.01 },
+      to: { speed: 0 },
+      config: {
+        mass: 1,
+        tension: 280,
+        friction: 100,
+      },
+    });
+  }, [setSpring]);
+
+  useEffect(() => {
+    const ref = canvasRef?.current;
+
+    if (!ref) {
+      return;
+    }
+
+    ref.addEventListener("pointerdown", onPointerDown);
+    ref.addEventListener("pointerup", onPointerUp);
+
+    return () => {
+      ref.removeEventListener("pointerdown", onPointerDown);
+      ref.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [onPointerDown, onPointerUp, canvasRef]);
+
   return (
     <>
-      {/* <Stats /> */}
+      <Stats />
       <color attach="background" args={[BG_COLOR]} />
       <OrbitControls enabled={true} />
       {lineShapes.map((props, i) => (
-        <Fatline key={i} index={i} {...props} texture={texture} />
+        <Fatline
+          key={i}
+          index={i}
+          {...props}
+          texture={texture}
+          incrementor={spring.speed}
+        />
       ))}
     </>
   );
