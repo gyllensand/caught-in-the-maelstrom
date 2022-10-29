@@ -1,6 +1,6 @@
 import { OrbitControls, Stats, useTexture } from "@react-three/drei";
 import { extend, useFrame, useThree } from "@react-three/fiber";
-import { a, SpringValue, useSpring } from "@react-spring/three";
+import { SpringValue, useSpring } from "@react-spring/three";
 import {
   RefObject,
   useCallback,
@@ -8,7 +8,6 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 import { MeshLine, MeshLineMaterial } from "meshline";
 import {
@@ -23,7 +22,7 @@ import {
 import {
   pickRandomColorWithTheme,
   pickRandomDecimalFromInterval,
-  pickRandomHash,
+  pickRandom,
   pickRandomIntFromInterval,
   pickRandomNumber,
 } from "./utils";
@@ -45,56 +44,69 @@ interface LineData {
 }
 
 export const CAMERA_Z = 6;
-const Z_MIN = -1;
 
 const LINE_COUNT = pickRandomIntFromInterval(150, 200);
-const SPEEDS = pickRandomHash([
+const SPEEDS = pickRandom([
   [0.001, 0.005],
   [0.001, 0.005],
   [0.0009, 0.005],
   [0.0008, 0.005],
   [0.0007, 0.005],
 ]);
-const LENGTHS = pickRandomHash([
+const LENGTHS = pickRandom([
   [0.1, 0.4],
   [0.1, 0.4],
   [0.3, 0.6],
   [0.5, 0.8],
 ]);
-const WIDTHS = pickRandomHash([
+const WIDTHS = pickRandom([
+  [0.01, 0.06],
+  [0.01, 0.06],
   [0.01, 0.06],
   [0.01, 0.06],
   [0.02, 0.07],
+  [0.03, 0.08],
+  [0.04, 0.09],
 ]);
 
-const WIDTH_GROWTH = pickRandomDecimalFromInterval(1.5, 6.5);
+const WIDTH_GROWTH = pickRandomDecimalFromInterval(1.5, 5);
 const RADIUS_START = pickRandomDecimalFromInterval(0.3, 0.8);
 const Z_INCREMENT = pickRandomDecimalFromInterval(0.05, 0.1);
 const ANGLE_INCREMENT = pickRandomDecimalFromInterval(0.01, 0.05);
 const RADIUS_INCREMENT = pickRandomDecimalFromInterval(0.01, 0.04);
 
-const WIREFRAME = pickRandomHash([
+const WIREFRAME = pickRandom([
   ...new Array(9).fill(null).map(() => false),
   true,
 ]);
-const USE_TEXTURE = pickRandomHash([true, false]);
-const REVERSE_ANGLE = pickRandomHash([true, false]);
-const IS_IRREGULAR_ANGLE = pickRandomHash([false, false, true]);
+const USE_TEXTURE = pickRandom([true, false]);
+const REVERSE_ANGLE = pickRandom([true, false]);
+const IS_IRREGULAR_ANGLE = ANGLE_INCREMENT < 0.03 && pickRandom([false, true]);
 const IRREGULAR_ANGLE = pickRandomDecimalFromInterval(1, 3);
+const IS_POSITION_OFFSET =
+  WIDTH_GROWTH > 3 ? false : pickRandom([false, false, false, true]);
+const POSITION_OFFSET = IS_POSITION_OFFSET
+  ? [pickRandomDecimalFromInterval(-2, 2), pickRandomDecimalFromInterval(-2, 2)]
+  : [0, 0];
 
-const BG_THEME = pickRandomHash([0, 1, 1, 1]);
+const BG_THEME = pickRandom([0, 1, 1, 1]);
 const DARK_BG = BG_THEME === 1;
-const BG_COLOR = pickRandomHash(DARK_BG ? DARK_BG_COLORS : LIGHT_BG_COLORS);
+const BG_COLOR = pickRandom(DARK_BG ? DARK_BG_COLORS : LIGHT_BG_COLORS);
 const LINE_THEME = DARK_BG ? LIGHT_COLORS : DARK_COLORS;
-const PRIMARY_COLOR = pickRandomHash(LINE_THEME);
-const SECONDARY_COLOR = pickRandomHash(LINE_THEME);
-const TERTIARY_COLOR = pickRandomHash(LINE_THEME);
-const MIXED_LINE_COLORS = pickRandomHash([20, 20, 30, 30, 90]);
-const SINGLE_LINE_COLORS = pickRandomHash([
+const PRIMARY_COLOR = pickRandom(LINE_THEME);
+const SECONDARY_COLOR = pickRandom(LINE_THEME);
+const TERTIARY_COLOR = pickRandom(LINE_THEME);
+const MIXED_LINE_COLORS = pickRandom([20, 20, 30, 30, 90]);
+const SINGLE_LINE_COLORS = pickRandom([
   ...new Array(9).fill(null).map(() => false),
   true,
 ]);
+const CROSSING_ANGLES = pickRandom([
+  ...new Array(29).fill(null).map(() => false),
+  true,
+]);
 
+console.log("WIDTHS", WIDTHS);
 console.log("MIXED_LINE_COLORS", MIXED_LINE_COLORS);
 console.log("SINGLE_LINE_COLORS", SINGLE_LINE_COLORS);
 console.log("BG_COLOR", BG_COLOR);
@@ -120,7 +132,9 @@ function Fatline({
 }) {
   const ref = useRef<InstancedMesh<MeshLine>>(null);
   const updatedCurve = useRef<number[]>([]);
-  let z = useRef(Z_MIN);
+  let x = useRef(0);
+  let y = useRef(0);
+  let z = useRef(-1);
   let radius = useRef(
     pickRandomNumber() > 0.8
       ? pickRandomDecimalFromInterval(
@@ -132,21 +146,38 @@ function Fatline({
   let angle = useRef(pickRandomDecimalFromInterval(0, Math.PI * 2));
 
   while (z.current < CAMERA_Z) {
+    if (IS_POSITION_OFFSET) {
+      x.current += POSITION_OFFSET[0] / 100;
+      y.current += POSITION_OFFSET[1] / 100;
+    }
+
     z.current += Z_INCREMENT;
 
-    REVERSE_ANGLE
-      ? (angle.current -= IS_IRREGULAR_ANGLE
-          ? Math.sin(z.current * IRREGULAR_ANGLE) * ANGLE_INCREMENT
-          : ANGLE_INCREMENT)
-      : (angle.current += IS_IRREGULAR_ANGLE
-          ? Math.sin(z.current * IRREGULAR_ANGLE) * ANGLE_INCREMENT
-          : ANGLE_INCREMENT);
+    const anglePath = IS_IRREGULAR_ANGLE
+      ? Math.sin(z.current * IRREGULAR_ANGLE) * ANGLE_INCREMENT
+      : ANGLE_INCREMENT;
+
+    if (CROSSING_ANGLES) {
+      if (index < LINE_COUNT / 2) {
+        REVERSE_ANGLE
+          ? (angle.current -= anglePath)
+          : (angle.current += anglePath);
+      } else {
+        REVERSE_ANGLE
+          ? (angle.current += anglePath)
+          : (angle.current -= anglePath);
+      }
+    } else {
+      REVERSE_ANGLE
+        ? (angle.current -= anglePath)
+        : (angle.current += anglePath);
+    }
 
     radius.current += RADIUS_INCREMENT;
 
     updatedCurve.current.push(
-      Math.cos(angle.current) * radius.current,
-      Math.sin(angle.current) * radius.current,
+      Math.cos(angle.current) * radius.current - x.current,
+      Math.sin(angle.current) * radius.current - y.current,
       z.current
     );
   }
@@ -164,13 +195,12 @@ function Fatline({
   );
   const dyingAt = useMemo(() => 1, []);
   const diedAt = useMemo(() => dyingAt + dashLength, [dyingAt, dashLength]);
-  const hasStarted = useRef(false);
 
   const resetLine = useCallback(() => {
     // @ts-ignore
     ref.current.material.uniforms.dashOffset.value = 0;
     // @ts-ignore
-    // ref.current.material.uniforms.opacity.value = 1;
+    ref.current.material.uniforms.opacity.value = 1;
   }, []);
 
   useLayoutEffect(() => {
@@ -178,15 +208,11 @@ function Fatline({
 
     ref.current!.geometry.setFromPoints(curve);
     ref.current!.geometry.setPoints(updatedCurve.current, (p: number) =>
-      WIDTH_GROWTH > 4 ? Math.sin(p * widthGrow) : p * widthGrow
+      WIDTH_GROWTH > 3 ? Math.sin(p * widthGrow) : p * widthGrow
     );
-
-    setTimeout(() => {
-      hasStarted.current = true;
-    }, index * 20);
   }, [curve, index]);
 
-  useFrame(() => {
+  useFrame(({ clock }) => {
     if (!ref.current) {
       return;
     }
@@ -197,16 +223,15 @@ function Fatline({
       return;
     }
 
-    // // @ts-ignore
-    // if (ref.current.material.uniforms.dashOffset.value < -dyingAt) {
-    //   // @ts-ignore
-    //   ref.current.material.uniforms.opacity.value =
-    //     0.9 +
-    //     // @ts-ignore
-    //     (ref.current.material.uniforms.dashOffset.value + dyingAt) / dashLength;
-    // }
-
-    if (hasStarted.current) {
+    // @ts-ignore
+    if (ref.current.material.uniforms.dashOffset.value < -dyingAt) {
+      // @ts-ignore
+      ref.current.material.uniforms.opacity.value =
+        1 +
+        // @ts-ignore
+        (ref.current.material.uniforms.dashOffset.value + dyingAt) / dashLength;
+    }
+    if (clock.getElapsedTime() > (index / 1000) * 20) {
       // @ts-ignore
       ref.current.material.uniforms.dashOffset.value -=
         speed + incrementor.get();
@@ -339,15 +364,17 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
       <Stats />
       <color attach="background" args={[BG_COLOR]} />
       <OrbitControls enabled={true} />
-      {lineShapes.map((props, i) => (
-        <Fatline
-          key={i}
-          index={i}
-          {...props}
-          texture={texture}
-          incrementor={spring.speed}
-        />
-      ))}
+      <group position={[POSITION_OFFSET[0], POSITION_OFFSET[1], 0]}>
+        {lineShapes.map((props, i) => (
+          <Fatline
+            key={i}
+            index={i}
+            {...props}
+            texture={texture}
+            incrementor={spring.speed}
+          />
+        ))}
+      </group>
     </>
   );
 };

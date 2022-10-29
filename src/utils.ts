@@ -2,41 +2,30 @@ import { MathUtils, Vector3 } from "three";
 
 declare const fxrand: () => number;
 
-export const sortRandom = <T>(array: T[]) =>
-  array.sort((a, b) => 0.5 - Math.random());
+export const sortRandom = <T>(array: T[], rndFn = fxrand) =>
+  array.sort((a, b) => 0.5 - rndFn());
 
-export const pickRandom = <T>(array: T[]) =>
-  array[Math.floor(Math.random() * array.length)];
+export const pickRandom = <T>(array: T[], rndFn = fxrand) =>
+  array[Math.floor(rndFn() * array.length)];
 
-export const sortRandomHash = <T>(array: T[]) =>
-  array.sort((a, b) => 0.5 - fxrand());
+export const pickRandomNumberFromArray = <T>(array: T[], rndFn = fxrand) =>
+  Math.floor(rndFn() * array.length);
 
-export const pickRandomHash = <T>(array: T[]) =>
-  array[Math.floor(fxrand() * array.length)];
-
-export const pickRandomHashNumberFromArray = <T>(array: T[]) =>
-  Math.floor(fxrand() * array.length);
-
-export const pickRandomIntFromInterval = (min: number, max: number) => {
-  return Math.floor(fxrand() * (max - min + 1) + min);
-};
-
-export const pickRandomHashDecimalFromInterval = (
+export const pickRandomIntFromInterval = (
   min: number,
   max: number,
-  decimalPlaces = 2
+  rndFn = fxrand
 ) => {
-  const rand = fxrand() * (max - min) + min;
-  const power = Math.pow(10, decimalPlaces);
-  return Math.floor(rand * power) / power;
+  return Math.floor(rndFn() * (max - min + 1) + min);
 };
 
 export const pickRandomDecimalFromInterval = (
   min: number,
   max: number,
-  decimalPlaces = 2
+  decimalPlaces = 2,
+  rndFn = fxrand
 ) => {
-  const rand = Math.random() * (max - min) + min;
+  const rand = rndFn() * (max - min) + min;
   const power = Math.pow(10, decimalPlaces);
   return Math.floor(rand * power) / power;
 };
@@ -109,7 +98,7 @@ export const pickRandomColorWithTheme = (
 ) => {
   const primaryColor = new Array(count).fill(null).map(() => color);
 
-  return pickRandomHash([...primaryColor, ...theme]);
+  return pickRandom([...primaryColor, ...theme]);
 };
 
 export const easeInOutSine = (t: number, b: number, _c: number, d: number) => {
