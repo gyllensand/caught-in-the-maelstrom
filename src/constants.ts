@@ -57,3 +57,5 @@ export const LIGHT_BG_COLORS = [
   "#d8ffdd",
   "#f7c8d3",
 ];
+
+export const BORDER_COLORS = [...DARK_BG_COLORS, ...LIGHT_BG_COLORS];
