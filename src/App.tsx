@@ -19,11 +19,102 @@ const borderStyle: CSSProperties = {
   position: "absolute",
   left: 0,
   top: 0,
-  borderWidth: 15,
+  borderWidth: 12,
   borderStyle: "solid",
   pointerEvents: "none",
   zIndex: 1,
 };
+
+const baseUrl = `${process.env.PUBLIC_URL}/audio/`;
+
+export interface Sample {
+  index: number;
+  sampler: Sampler;
+}
+
+export const CHORDS: Sample[] = [
+  {
+    index: 0,
+    sampler: new Sampler({
+      urls: {
+        1: `a3s.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 1,
+    sampler: new Sampler({
+      urls: {
+        1: `a3s2.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 2,
+    sampler: new Sampler({
+      urls: {
+        1: `c4.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 3,
+    sampler: new Sampler({
+      urls: {
+        1: `d4s.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 4,
+    sampler: new Sampler({
+      urls: {
+        1: `d4s2.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 5,
+    sampler: new Sampler({
+      urls: {
+        1: `d4s2.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 6,
+    sampler: new Sampler({
+      urls: {
+        1: `f4.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 7,
+    sampler: new Sampler({
+      urls: {
+        1: `g3.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 8,
+    sampler: new Sampler({
+      urls: {
+        1: `g3s.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+];
 
 const App = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);

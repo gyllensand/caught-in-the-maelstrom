@@ -9,6 +9,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { MeshLine, MeshLineMaterial } from "meshline";
 import {
@@ -34,6 +35,8 @@ import {
   LIGHT_BG_COLORS,
   LIGHT_COLORS,
 } from "./constants";
+import { Destination, Filter, start } from "tone";
+import { CHORDS, Sample } from "./App";
 
 declare const fxpreview: () => void;
 
@@ -50,13 +53,13 @@ interface LineData {
 
 export const CAMERA_Z = 6;
 
-const LINE_COUNT = pickRandomIntFromInterval(150, 200);
+const LINE_COUNT = pickRandomIntFromInterval(200, 300);
 const SPEEDS = pickRandom([
   [0.001, 0.005],
   [0.001, 0.005],
-  [0.0009, 0.005],
-  [0.0008, 0.005],
-  [0.0007, 0.005],
+  [0.0009, 0.0049],
+  [0.0008, 0.0048],
+  [0.0007, 0.0047],
 ]);
 const LENGTHS = pickRandom([
   [0.1, 0.4],
@@ -92,7 +95,7 @@ const POSITION_OFFSET = IS_POSITION_OFFSET
   ? [pickRandomDecimalFromInterval(-2, 2), pickRandomDecimalFromInterval(-2, 2)]
   : [0, 0];
 
-const BG_THEME = pickRandom([0, 1, 1, 1]);
+const BG_THEME = pickRandom([0, 1, 1, 1, 1]);
 const DARK_BG = BG_THEME === 1;
 const BG_COLOR = pickRandom(DARK_BG ? DARK_BG_COLORS : LIGHT_BG_COLORS);
 export const BORDER_COLOR = pickRandom(
@@ -102,7 +105,7 @@ const LINE_THEME = DARK_BG ? LIGHT_COLORS : DARK_COLORS;
 const PRIMARY_COLOR = pickRandom(LINE_THEME);
 const SECONDARY_COLOR = pickRandom(LINE_THEME);
 const TERTIARY_COLOR = pickRandom(LINE_THEME);
-const MIXED_LINE_COLORS = pickRandom([30, 60, 90]);
+const MIXED_LINE_COLORS = pickRandom([60, 90]);
 const SINGLE_LINE_COLORS = pickRandom([
   ...new Array(9).fill(null).map(() => false),
   true,
@@ -113,12 +116,15 @@ window.$fxhashFeatures = {
   lineCount: LINE_COUNT,
   wireframe: WIREFRAME,
   bgColor: BG_COLOR,
+  borderColor: BORDER_COLOR,
   lineColor: SINGLE_LINE_COLORS
     ? PRIMARY_COLOR
-    : [PRIMARY_COLOR, SECONDARY_COLOR, TERTIARY_COLOR],
+    : [PRIMARY_COLOR, SECONDARY_COLOR, TERTIARY_COLOR].join(),
 };
 
 console.log("WIDTHS", WIDTHS);
+console.log("SPEEDS", SPEEDS);
+console.log("LENGTHS", LENGTHS);
 console.log("MIXED_LINE_COLORS", MIXED_LINE_COLORS);
 console.log("SINGLE_LINE_COLORS", SINGLE_LINE_COLORS);
 console.log("BG_COLOR", BG_COLOR);
@@ -137,12 +143,14 @@ function Fatline({
   color,
   speed,
   texture,
-  incrementor,
+  speedSpring,
+  lineWidthSpring,
   previewIndexes,
   hasRunPreview,
 }: LineData & {
   texture: { map: Texture };
-  incrementor: SpringValue<number>;
+  speedSpring: SpringValue<number>;
+  lineWidthSpring: SpringValue<number>;
   previewIndexes: number[];
   hasRunPreview: MutableRefObject<boolean>;
 }) {
@@ -247,7 +255,12 @@ function Fatline({
     if (clock.getElapsedTime() > (index / 1000) * 20) {
       // @ts-ignore
       ref.current.material.uniforms.dashOffset.value -=
-        speed + incrementor.get();
+        speed + speedSpring.get();
+
+      // @ts-ignore
+      ref.current.material.uniforms.lineWidth.value =
+        // @ts-ignore
+        width + lineWidthSpring.get();
     }
   });
 
@@ -329,20 +342,58 @@ const lineShapes = new Array(LINE_COUNT)
   .map((_, i) => generateLine(LINE_COUNT, i));
 
 const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
+  const toneInitialized = useRef(false);
+  const lowpassFilter = useRef(new Filter(20000, "lowpass"));
+
   const texture = useTexture({
     map: `${process.env.PUBLIC_URL}/stroke.png`,
   });
 
-  const [spring, setSpring] = useSpring(() => ({
+  const [lastPlayedSample, setLastPlayedSample] = useState<Sample>();
+  const availableChords = useMemo(
+    () => CHORDS.filter(({ index }) => index !== lastPlayedSample?.index),
+    [lastPlayedSample]
+  );
+
+  useEffect(() => {
+    if (lastPlayedSample && lastPlayedSample.sampler.loaded) {
+      CHORDS.filter(({ sampler }) => sampler.triggerRelease("C#-1", "+0.2"));
+      lastPlayedSample.sampler.triggerAttack("C#-1");
+    }
+  }, [lastPlayedSample]);
+
+  useEffect(() => {
+    CHORDS.forEach((chord) => {
+      chord.sampler.chain(lowpassFilter.current, Destination);
+    });
+  }, []);
+
+  const [{ speed }, setSpeed] = useSpring(() => ({
     speed: 0,
   }));
 
-  const onPointerDown = useCallback(() => {
-    setSpring.start({ speed: -0.005 });
-  }, [setSpring]);
+  const [{ lineWidth }, setLineWidth] = useSpring(() => ({
+    lineWidth: 0,
+  }));
 
-  const onPointerUp = useCallback(() => {
-    setSpring.start({
+  const [{ lowpass }, setLowpass] = useSpring(() => ({
+    lowpass: 0,
+  }));
+
+  const onPointerDown = useCallback(() => {
+    setSpeed.start({ speed: -0.0075 });
+    setLowpass.start({
+      lowpass: 1,
+      config: {
+        mass: 1,
+        tension: 280,
+        friction: 100,
+      },
+    });
+  }, [setSpeed, setLowpass]);
+
+  const onPointerUp = useCallback(async () => {
+    setSpeed.start({
       from: { speed: 0.015 },
       to: { speed: 0 },
       config: {
@@ -351,7 +402,47 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
         friction: 200,
       },
     });
-  }, [setSpring]);
+    setLineWidth.start({
+      from: { lineWidth: lineWidth.get() },
+      to: { lineWidth: 0.05 },
+      config: {
+        mass: 1,
+        tension: 280,
+        friction: 20,
+      },
+      onRest: () => {
+        setLineWidth.start({
+          from: { lineWidth: lineWidth.get() },
+          to: { lineWidth: 0 },
+          config: {
+            mass: 1,
+            tension: 280,
+            friction: 100,
+          },
+        });
+      },
+    });
+    setLowpass.start({
+      lowpass: 0,
+      config: {
+        mass: 1,
+        tension: 280,
+        friction: 300,
+      },
+    });
+
+    if (!toneInitialized.current) {
+      await start();
+      toneInitialized.current = true;
+    }
+
+    const currentSampler = pickRandom(availableChords);
+    setLastPlayedSample(currentSampler);
+  }, [setSpeed, setLowpass, availableChords, lineWidth, setLineWidth]);
+
+  useFrame(() => {
+    lowpassFilter.current.frequency.value = 20000 - lowpass.get() * 19900;
+  });
 
   useEffect(() => {
     const ref = canvasRef?.current;
@@ -391,7 +482,8 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
             key={i}
             {...props}
             texture={texture}
-            incrementor={spring.speed}
+            speedSpring={speed}
+            lineWidthSpring={lineWidth}
             previewIndexes={previewIndexes}
             hasRunPreview={hasRunPreview}
           />
