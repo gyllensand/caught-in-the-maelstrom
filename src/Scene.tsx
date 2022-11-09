@@ -35,8 +35,9 @@ import {
   LIGHT_BG_COLORS,
   LIGHT_COLORS,
 } from "./constants";
-import { Destination, Filter, start } from "tone";
-import { CHORDS, Sample } from "./App";
+import { start } from "tone";
+import { ADDS, CHORDS, NOISE, Sample } from "./App";
+import { SpringRef } from "react-spring";
 
 declare const fxpreview: () => void;
 
@@ -53,7 +54,7 @@ interface LineData {
 
 export const CAMERA_Z = 6;
 
-const LINE_COUNT = pickRandomIntFromInterval(200, 300);
+const LINE_COUNT = pickRandomIntFromInterval(200, 400);
 const SPEEDS = pickRandom([
   [0.001, 0.005],
   [0.001, 0.005],
@@ -88,7 +89,10 @@ const WIREFRAME = pickRandom([
 ]);
 const USE_TEXTURE = pickRandom([true, false]);
 const REVERSE_ANGLE = pickRandom([true, false]);
-const IS_IRREGULAR_ANGLE = ANGLE_INCREMENT < 0.02 && pickRandom([false, true]);
+const IS_IRREGULAR_ANGLE =
+  ANGLE_INCREMENT < 0.02 &&
+  RADIUS_INCREMENT > 0.01 &&
+  pickRandom([false, true, true, true]);
 const IRREGULAR_ANGLE = pickRandomDecimalFromInterval(1, 3);
 const IS_POSITION_OFFSET = pickRandom([false, true]);
 const POSITION_OFFSET = IS_POSITION_OFFSET
@@ -169,29 +173,6 @@ function Fatline({
   );
   let angle = useRef(pickRandomDecimalFromInterval(0, Math.PI * 2));
 
-  while (z.current < CAMERA_Z) {
-    if (IS_POSITION_OFFSET) {
-      x.current += POSITION_OFFSET[0] / 100;
-      y.current += POSITION_OFFSET[1] / 100;
-    }
-
-    z.current += Z_INCREMENT;
-
-    const anglePath = IS_IRREGULAR_ANGLE
-      ? Math.sin(z.current * IRREGULAR_ANGLE) * ANGLE_INCREMENT
-      : ANGLE_INCREMENT;
-
-    REVERSE_ANGLE ? (angle.current -= anglePath) : (angle.current += anglePath);
-
-    radius.current += RADIUS_INCREMENT;
-
-    updatedCurve.current.push(
-      Math.cos(angle.current) * radius.current - x.current,
-      Math.sin(angle.current) * radius.current - y.current,
-      z.current
-    );
-  }
-
   const dashArray = useMemo(() => 2, []);
   const dashOffset = useMemo(() => 0, []);
   const dashRatio = useMemo(() => 1 - visibleLength * 0.5, [visibleLength]);
@@ -206,21 +187,70 @@ function Fatline({
   const dyingAt = useMemo(() => 1, []);
   const diedAt = useMemo(() => dyingAt + dashLength, [dyingAt, dashLength]);
 
+  const resetCurve = useCallback(() => {
+    while (z.current < CAMERA_Z) {
+      if (IS_POSITION_OFFSET) {
+        x.current += POSITION_OFFSET[0] / 100;
+        y.current += POSITION_OFFSET[1] / 100;
+      }
+
+      z.current += Z_INCREMENT;
+
+      const anglePath = IS_IRREGULAR_ANGLE
+        ? Math.sin(z.current * IRREGULAR_ANGLE) * ANGLE_INCREMENT
+        : ANGLE_INCREMENT;
+
+      REVERSE_ANGLE
+        ? (angle.current -= anglePath)
+        : (angle.current += anglePath);
+
+      radius.current += RADIUS_INCREMENT;
+
+      updatedCurve.current.push(
+        Math.cos(angle.current) * radius.current - x.current,
+        Math.sin(angle.current) * radius.current - y.current,
+        z.current
+      );
+    }
+  }, []);
+
   const resetLine = useCallback(() => {
     // @ts-ignore
     ref.current.material.uniforms.dashOffset.value = 0;
     // @ts-ignore
     ref.current.material.uniforms.opacity.value = 1;
-  }, []);
+
+    updatedCurve.current = [];
+    x.current = 0;
+    y.current = 0;
+    z.current = -1;
+    radius.current =
+      pickRandomNumber() > 0.8
+        ? pickRandomDecimalFromInterval(
+            RADIUS_START - 0.2 - 0.1,
+            RADIUS_START - 0.2 + 0.1
+          )
+        : pickRandomDecimalFromInterval(RADIUS_START - 0.1, RADIUS_START + 0.1);
+
+    angle.current = pickRandomDecimalFromInterval(0, Math.PI * 2);
+
+    resetCurve();
+
+    const widthGrow = WIREFRAME ? WIDTH_GROWTH * 2 : WIDTH_GROWTH;
+    ref.current!.geometry.setPoints(updatedCurve.current, (p: number) =>
+      WIDTH_GROWTH > 3 ? Math.sin(p * widthGrow) : p * widthGrow
+    );
+  }, [resetCurve]);
 
   useLayoutEffect(() => {
     const widthGrow = WIREFRAME ? WIDTH_GROWTH * 2 : WIDTH_GROWTH;
 
+    resetCurve();
     ref.current!.geometry.setFromPoints(curve);
     ref.current!.geometry.setPoints(updatedCurve.current, (p: number) =>
       WIDTH_GROWTH > 3 ? Math.sin(p * widthGrow) : p * widthGrow
     );
-  }, [curve, index, speed]);
+  }, [curve, index, speed, resetCurve]);
 
   useFrame(({ clock }) => {
     if (!ref.current) {
@@ -341,9 +371,17 @@ const lineShapes = new Array(LINE_COUNT)
   .fill(null)
   .map((_, i) => generateLine(LINE_COUNT, i));
 
-const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
+const Scene = ({
+  canvasRef,
+  setBorderWidth,
+}: {
+  canvasRef: RefObject<HTMLCanvasElement>;
+  setBorderWidth: SpringRef<{
+    borderWidth: number;
+  }>;
+}) => {
   const toneInitialized = useRef(false);
-  const lowpassFilter = useRef(new Filter(20000, "lowpass"));
+  const needsAddSynth = useRef(false);
 
   const texture = useTexture({
     map: `${process.env.PUBLIC_URL}/stroke.png`,
@@ -355,19 +393,6 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
     [lastPlayedSample]
   );
 
-  useEffect(() => {
-    if (lastPlayedSample && lastPlayedSample.sampler.loaded) {
-      CHORDS.filter(({ sampler }) => sampler.triggerRelease("C#-1", "+0.2"));
-      lastPlayedSample.sampler.triggerAttack("C#-1");
-    }
-  }, [lastPlayedSample]);
-
-  useEffect(() => {
-    CHORDS.forEach((chord) => {
-      chord.sampler.chain(lowpassFilter.current, Destination);
-    });
-  }, []);
-
   const [{ speed }, setSpeed] = useSpring(() => ({
     speed: 0,
   }));
@@ -376,25 +401,65 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
     lineWidth: 0,
   }));
 
-  const [{ lowpass }, setLowpass] = useSpring(() => ({
-    lowpass: 0,
-  }));
+  useEffect(() => {
+    if (lastPlayedSample && lastPlayedSample.sampler.loaded) {
+      CHORDS.filter(({ sampler }) => sampler.triggerRelease("C#-1", "+0.2"));
+      lastPlayedSample.sampler.triggerAttack("C#-1");
+
+      if (needsAddSynth.current) {
+        ADDS.filter(({ sampler }) => sampler.triggerRelease("C#-1", "+0.2"));
+        ADDS[lastPlayedSample.index].sampler.triggerAttack("C#-1");
+      }
+
+      needsAddSynth.current = false;
+    }
+  }, [lastPlayedSample]);
+
+  useEffect(() => {
+    CHORDS.forEach((chord) => {
+      chord.sampler.toDestination();
+    });
+
+    ADDS.forEach((additional) => {
+      additional.sampler.volume.value = -5;
+      additional.sampler.toDestination();
+    });
+
+    NOISE.toDestination();
+  }, []);
 
   const onPointerDown = useCallback(() => {
-    setSpeed.start({ speed: -0.0075 });
-    setLowpass.start({
-      lowpass: 1,
+    setSpeed.start({
+      speed: -0.03,
       config: {
         mass: 1,
-        tension: 280,
-        friction: 100,
+        tension: 200,
+        friction: 600,
       },
     });
-  }, [setSpeed, setLowpass]);
+    setBorderWidth.start({
+      borderWidth: 24,
+      delay: 500,
+      config: {
+        mass: 1,
+        tension: 170,
+        friction: 50,
+      },
+    });
+
+    if (toneInitialized.current) {
+      NOISE.triggerAttack("C#-1", "+1");
+    }
+  }, [setSpeed, setBorderWidth]);
 
   const onPointerUp = useCallback(async () => {
+    const speedFrom =
+      Math.abs(speed.get()) < 0.01 ? 0.015 : Math.abs(speed.get()) * 2;
+    const lineTo =
+      Math.abs(speed.get()) < 0.01 ? 0.05 : Math.abs(speed.get()) * 3;
+
     setSpeed.start({
-      from: { speed: 0.015 },
+      from: { speed: speedFrom },
       to: { speed: 0 },
       config: {
         mass: 1,
@@ -404,7 +469,7 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
     });
     setLineWidth.start({
       from: { lineWidth: lineWidth.get() },
-      to: { lineWidth: 0.05 },
+      to: { lineWidth: lineTo },
       config: {
         mass: 1,
         tension: 280,
@@ -422,12 +487,12 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
         });
       },
     });
-    setLowpass.start({
-      lowpass: 0,
+    setBorderWidth.start({
+      borderWidth: 12,
       config: {
         mass: 1,
         tension: 280,
-        friction: 300,
+        friction: 100,
       },
     });
 
@@ -438,11 +503,20 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
 
     const currentSampler = pickRandom(availableChords);
     setLastPlayedSample(currentSampler);
-  }, [setSpeed, setLowpass, availableChords, lineWidth, setLineWidth]);
 
-  useFrame(() => {
-    lowpassFilter.current.frequency.value = 20000 - lowpass.get() * 19900;
-  });
+    if (Math.abs(speed.get()) > 0.02) {
+      needsAddSynth.current = true;
+    }
+
+    NOISE.triggerRelease("C#-1", "+0.2");
+  }, [
+    setSpeed,
+    availableChords,
+    lineWidth,
+    setLineWidth,
+    speed,
+    setBorderWidth,
+  ]);
 
   useEffect(() => {
     const ref = canvasRef?.current;
@@ -475,7 +549,7 @@ const Scene = ({ canvasRef }: { canvasRef: RefObject<HTMLCanvasElement> }) => {
   return (
     <>
       <color attach="background" args={[BG_COLOR]} />
-      <OrbitControls enabled={false} />
+      <OrbitControls enabled={true} />
       <group position={[POSITION_OFFSET[0], POSITION_OFFSET[1], 0]}>
         {lineShapes.map((props, i) => (
           <Fatline

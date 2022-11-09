@@ -1,4 +1,4 @@
-import { MathUtils, Vector3 } from "three";
+import { Camera, MathUtils, Vector3 } from "three";
 
 declare const fxrand: () => number;
 
@@ -124,4 +124,19 @@ export const generateUUID = () => {
     }
     return (c === "x" ? r : (r & 0x7) | 0x8).toString(16);
   });
+};
+
+export const worldPointFromScreenPoint = (
+  screenPoint: { x: number; y: number },
+  camera: Camera
+) => {
+  const vector = new Vector3();
+  vector.set(
+    (screenPoint.x / window.innerWidth) * 2 - 1,
+    -(screenPoint.y / window.innerHeight) * 2 + 1,
+    0
+  );
+  vector.unproject(camera);
+
+  return vector;
 };

@@ -2,6 +2,7 @@ import { CSSProperties, Suspense, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import Scene, { BORDER_COLOR, CAMERA_Z } from "./Scene";
 import { Sampler } from "tone";
+import { a, useSpring } from "react-spring";
 
 console.log(
   "%c * Computer Emotions * ",
@@ -19,7 +20,6 @@ const borderStyle: CSSProperties = {
   position: "absolute",
   left: 0,
   top: 0,
-  borderWidth: 12,
   borderStyle: "solid",
   pointerEvents: "none",
   zIndex: 1,
@@ -82,7 +82,7 @@ export const CHORDS: Sample[] = [
     index: 5,
     sampler: new Sampler({
       urls: {
-        1: `d4s2.mp3`,
+        1: `f4.mp3`,
       },
       baseUrl,
     }),
@@ -91,22 +91,13 @@ export const CHORDS: Sample[] = [
     index: 6,
     sampler: new Sampler({
       urls: {
-        1: `f4.mp3`,
-      },
-      baseUrl,
-    }),
-  },
-  {
-    index: 7,
-    sampler: new Sampler({
-      urls: {
         1: `g3.mp3`,
       },
       baseUrl,
     }),
   },
   {
-    index: 8,
+    index: 7,
     sampler: new Sampler({
       urls: {
         1: `g3s.mp3`,
@@ -116,19 +107,107 @@ export const CHORDS: Sample[] = [
   },
 ];
 
+export const ADDS: Sample[] = [
+  {
+    index: 0,
+    sampler: new Sampler({
+      urls: {
+        1: `add-a3s.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 1,
+    sampler: new Sampler({
+      urls: {
+        1: `add-a3s2.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 2,
+    sampler: new Sampler({
+      urls: {
+        1: `add-c4.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 3,
+    sampler: new Sampler({
+      urls: {
+        1: `add-d4s.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 4,
+    sampler: new Sampler({
+      urls: {
+        1: `add-d4s2.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 5,
+    sampler: new Sampler({
+      urls: {
+        1: `add-f4.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 6,
+    sampler: new Sampler({
+      urls: {
+        1: `add-g3.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+  {
+    index: 7,
+    sampler: new Sampler({
+      urls: {
+        1: `add-g3s.mp3`,
+      },
+      baseUrl,
+    }),
+  },
+];
+
+export const NOISE = new Sampler({
+  urls: {
+    1: `noise.mp3`,
+  },
+  baseUrl,
+});
+
 const App = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  const [{ borderWidth }, setBorderWidth] = useSpring(() => ({
+    borderWidth: 12,
+  }));
+
   return (
     <>
-      <div style={{ ...borderStyle, borderColor: BORDER_COLOR }}></div>
+      <a.div
+        style={{ ...borderStyle, borderColor: BORDER_COLOR, borderWidth }}
+      ></a.div>
       <Canvas
         ref={canvasRef}
         camera={{ position: [0, 0, CAMERA_Z], fov: 50, near: 1, far: 1000 }}
         dpr={window.devicePixelRatio}
       >
         <Suspense fallback={null}>
-          <Scene canvasRef={canvasRef} />
+          <Scene canvasRef={canvasRef} setBorderWidth={setBorderWidth} />
         </Suspense>
       </Canvas>
     </>
