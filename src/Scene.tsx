@@ -1,5 +1,5 @@
 import { OrbitControls, useTexture } from "@react-three/drei";
-import { extend, useFrame } from "@react-three/fiber";
+import { extend, useFrame, useThree } from "@react-three/fiber";
 import { SpringValue, useSpring } from "@react-spring/three";
 import {
   MutableRefObject,
@@ -27,6 +27,7 @@ import {
   pickRandom,
   pickRandomIntFromInterval,
   pickRandomNumber,
+  getSizeByWidthAspect,
 } from "./utils";
 import {
   BORDER_COLORS,
@@ -90,7 +91,7 @@ const WIREFRAME = pickRandom([
 const USE_TEXTURE = pickRandom([true, false]);
 const REVERSE_ANGLE = pickRandom([true, false]);
 const IS_IRREGULAR_ANGLE =
-  ANGLE_INCREMENT < 0.02 &&
+  ANGLE_INCREMENT < 0.025 &&
   RADIUS_INCREMENT > 0.01 &&
   pickRandom([false, true, true, true]);
 const IRREGULAR_ANGLE = pickRandomDecimalFromInterval(1, 3);
@@ -121,23 +122,11 @@ window.$fxhashFeatures = {
   wireframe: WIREFRAME,
   bgColor: BG_COLOR,
   borderColor: BORDER_COLOR,
+  hasIrregularAngle: IS_IRREGULAR_ANGLE,
   lineColor: SINGLE_LINE_COLORS
     ? PRIMARY_COLOR
     : [PRIMARY_COLOR, SECONDARY_COLOR, TERTIARY_COLOR].join(),
 };
-
-console.log("WIDTHS", WIDTHS);
-console.log("SPEEDS", SPEEDS);
-console.log("LENGTHS", LENGTHS);
-console.log("MIXED_LINE_COLORS", MIXED_LINE_COLORS);
-console.log("SINGLE_LINE_COLORS", SINGLE_LINE_COLORS);
-console.log("BG_COLOR", BG_COLOR);
-console.log("WIDTH_GROWTH", WIDTH_GROWTH);
-console.log("RADIUS_START", RADIUS_START);
-console.log("Z_INCREMENT", Z_INCREMENT);
-console.log("ANGLE_INCREMENT", ANGLE_INCREMENT);
-console.log("RADIUS_INCREMENT", RADIUS_INCREMENT);
-console.log("IRREGULAR_ANGLE", IRREGULAR_ANGLE);
 
 function Fatline({
   index,
@@ -272,7 +261,7 @@ function Fatline({
     }
 
     // @ts-ignore
-    if (ref.current.material.uniforms.dashOffset.value < -dyingAt / 1.5) {
+    if (ref.current.material.uniforms.dashOffset.value < -dyingAt) {
       if (
         previewIndexes.find((o) => o === index) !== undefined &&
         !hasRunPreview.current
@@ -380,6 +369,9 @@ const Scene = ({
     borderWidth: number;
   }>;
 }) => {
+  const { aspect } = useThree((state) => ({
+    aspect: state.viewport.aspect,
+  }));
   const toneInitialized = useRef(false);
   const needsAddSynth = useRef(false);
 
@@ -407,7 +399,7 @@ const Scene = ({
       lastPlayedSample.sampler.triggerAttack("C#-1");
 
       if (needsAddSynth.current) {
-        ADDS.filter(({ sampler }) => sampler.triggerRelease("C#-1", "+0.2"));
+        ADDS.filter(({ sampler }) => sampler.triggerRelease("C#-1"));
         ADDS[lastPlayedSample.index].sampler.triggerAttack("C#-1");
       }
 
@@ -448,7 +440,7 @@ const Scene = ({
     });
 
     if (toneInitialized.current) {
-      NOISE.triggerAttack("C#-1", "+1");
+      NOISE.triggerAttack("C#-1");
     }
   }, [setSpeed, setBorderWidth]);
 
@@ -550,18 +542,28 @@ const Scene = ({
     <>
       <color attach="background" args={[BG_COLOR]} />
       <OrbitControls enabled={true} />
-      <group position={[POSITION_OFFSET[0], POSITION_OFFSET[1], 0]}>
-        {lineShapes.map((props, i) => (
-          <Fatline
-            key={i}
-            {...props}
-            texture={texture}
-            speedSpring={speed}
-            lineWidthSpring={lineWidth}
-            previewIndexes={previewIndexes}
-            hasRunPreview={hasRunPreview}
-          />
-        ))}
+      <group
+        position={[
+          POSITION_OFFSET[0] > 0
+            ? -getSizeByWidthAspect(0.5, aspect)
+            : getSizeByWidthAspect(0.5, aspect),
+          0,
+          0,
+        ]}
+      >
+        <group position={[POSITION_OFFSET[0], POSITION_OFFSET[1], 0]}>
+          {lineShapes.map((props, i) => (
+            <Fatline
+              key={i}
+              {...props}
+              texture={texture}
+              speedSpring={speed}
+              lineWidthSpring={lineWidth}
+              previewIndexes={previewIndexes}
+              hasRunPreview={hasRunPreview}
+            />
+          ))}
+        </group>
       </group>
     </>
   );
