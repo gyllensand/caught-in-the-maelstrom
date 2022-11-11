@@ -81,7 +81,7 @@ const WIDTHS = pickRandom([
 const WIDTH_GROWTH = pickRandomDecimalFromInterval(1.5, 5);
 const RADIUS_START = pickRandomDecimalFromInterval(0.3, 0.8);
 const Z_INCREMENT = pickRandomDecimalFromInterval(0.05, 0.1);
-const ANGLE_INCREMENT = pickRandomDecimalFromInterval(0.01, 0.05);
+const ANGLE_INCREMENT = pickRandomDecimalFromInterval(0.01, 0.04);
 const RADIUS_INCREMENT = pickRandomDecimalFromInterval(0.01, 0.04);
 
 const WIREFRAME = pickRandom([
@@ -91,10 +91,10 @@ const WIREFRAME = pickRandom([
 const USE_TEXTURE = pickRandom([true, false]);
 const REVERSE_ANGLE = pickRandom([true, false]);
 const IS_IRREGULAR_ANGLE =
-  ANGLE_INCREMENT < 0.025 &&
+  ANGLE_INCREMENT < 0.02 &&
   RADIUS_INCREMENT > 0.01 &&
   pickRandom([false, true, true, true]);
-const IRREGULAR_ANGLE = pickRandomDecimalFromInterval(1, 3);
+const IRREGULAR_ANGLE = pickRandomDecimalFromInterval(1, 4);
 const IS_POSITION_OFFSET = pickRandom([false, true]);
 const POSITION_OFFSET = IS_POSITION_OFFSET
   ? [pickRandomDecimalFromInterval(-2, 2), pickRandomDecimalFromInterval(-2, 2)]
@@ -115,10 +115,12 @@ const SINGLE_LINE_COLORS = pickRandom([
   ...new Array(9).fill(null).map(() => false),
   true,
 ]);
+const PITCH = pickRandom(['C#-1', 'D-1']);
 
 // @ts-ignore
 window.$fxhashFeatures = {
   lineCount: LINE_COUNT,
+  pitch: PITCH,
   wireframe: WIREFRAME,
   bgColor: BG_COLOR,
   borderColor: BORDER_COLOR,
@@ -395,12 +397,12 @@ const Scene = ({
 
   useEffect(() => {
     if (lastPlayedSample && lastPlayedSample.sampler.loaded) {
-      CHORDS.filter(({ sampler }) => sampler.triggerRelease("C#-1", "+0.2"));
-      lastPlayedSample.sampler.triggerAttack("C#-1");
+      CHORDS.filter(({ sampler }) => sampler.triggerRelease(PITCH, "+0.2"));
+      lastPlayedSample.sampler.triggerAttack(PITCH);
 
       if (needsAddSynth.current) {
-        ADDS.filter(({ sampler }) => sampler.triggerRelease("C#-1"));
-        ADDS[lastPlayedSample.index].sampler.triggerAttack("C#-1");
+        ADDS.filter(({ sampler }) => sampler.triggerRelease(PITCH));
+        ADDS[lastPlayedSample.index].sampler.triggerAttack(PITCH);
       }
 
       needsAddSynth.current = false;
@@ -440,7 +442,7 @@ const Scene = ({
     });
 
     if (toneInitialized.current) {
-      NOISE.triggerAttack("C#-1");
+      NOISE.triggerAttack(PITCH);
     }
   }, [setSpeed, setBorderWidth]);
 
@@ -500,7 +502,7 @@ const Scene = ({
       needsAddSynth.current = true;
     }
 
-    NOISE.triggerRelease("C#-1", "+0.2");
+    NOISE.triggerRelease(PITCH, "+0.2");
   }, [
     setSpeed,
     availableChords,
@@ -541,7 +543,7 @@ const Scene = ({
   return (
     <>
       <color attach="background" args={[BG_COLOR]} />
-      <OrbitControls enabled={true} />
+      <OrbitControls enabled={false} />
       <group
         position={[
           POSITION_OFFSET[0] > 0
