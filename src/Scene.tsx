@@ -55,7 +55,7 @@ interface LineData {
 
 export const CAMERA_Z = 6;
 
-const LINE_COUNT = pickRandomIntFromInterval(200, 400);
+const LINE_COUNT = pickRandomIntFromInterval(250, 400);
 const SPEEDS = pickRandom([
   [0.001, 0.005],
   [0.001, 0.005],
