@@ -28,6 +28,7 @@ import {
   pickRandomIntFromInterval,
   pickRandomNumber,
   getSizeByWidthAspect,
+  minMaxNumber,
 } from "./utils";
 import {
   BORDER_COLORS,
@@ -448,9 +449,9 @@ const Scene = ({
 
   const onPointerUp = useCallback(async () => {
     const speedFrom =
-      Math.abs(speed.get()) < 0.01 ? 0.015 : Math.abs(speed.get()) * 2;
+      minMaxNumber(Math.abs(speed.get()) < 0.01 ? 0.015 : Math.abs(speed.get()) * 2, 0, 0.05);
     const lineTo =
-      Math.abs(speed.get()) < 0.01 ? 0.05 : Math.abs(speed.get()) * 3;
+      minMaxNumber(Math.abs(speed.get()) < 0.01 ? 0.05 : Math.abs(speed.get()) * 3, 0, 0.08);
 
     setSpeed.start({
       from: { speed: speedFrom },
